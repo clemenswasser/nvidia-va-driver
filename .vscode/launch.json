@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug",
+            "program": "vainfo",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "LIBVA_DRIVER_NAME": "libnvidia_va",
+                "LIBVA_DRIVERS_PATH": "/home/clemens/dev/nvidia-va-driver/target/debug",
+            },
+            "preLaunchTask": "cargo build",
+        },
+    ]
+}

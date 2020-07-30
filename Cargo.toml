@@ -1,0 +1,11 @@
+[package]
+name = "nvidia-va-driver"
+version = "0.1.0"
+authors = ["Clemens Wasser <clemens.wasser@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "nvidia_va_drv_video"
+crate-type = ["cdylib"]
+
+[dependencies]
