@@ -1,7 +1,7 @@
 #![warn(clippy::all)]
 
 mod debug;
-mod driver_data;
+mod driver;
 mod va_backend;
 use va_backend as va;
 mod vdpau;
@@ -19,7 +19,7 @@ const VDPAU_MAX_DISPLAY_ATTRIBUTES: usize = 6;
 pub(crate) fn va_driver_init(ctx: va::VADriverContextP) -> Result<(), va::VAStatus> {
     let mut ctx = unsafe { &mut *ctx };
 
-    let mut driver_data = driver_data::DriverData::new(ctx)?;
+    let mut driver_data = driver::Driver::new(ctx)?;
     ctx.pDriverData = &mut driver_data as *mut _ as _;
     std::mem::forget(driver_data);
 
@@ -101,7 +101,7 @@ pub extern "C" fn __vaDriverInit_1_8(ctx: va::VADriverContextP) -> va::VAStatus 
     }
 }
 
-pub extern "C" fn terminate(ctx: va::VADriverContextP) -> va::VAStatus {
-    unsafe { ((*ctx).pDriverData as *mut driver_data::DriverData).drop_in_place() };
+pub(crate) extern "C" fn terminate(ctx: va::VADriverContextP) -> va::VAStatus {
+    unsafe { ((*ctx).pDriverData as *mut driver::Driver).drop_in_place() };
     va::VA_STATUS_SUCCESS as _
 }
