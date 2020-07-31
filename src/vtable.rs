@@ -40,29 +40,36 @@ const VDP_DECODER_PROFILE_HEVC_MAIN_444: vdpau::VdpDecoderProfile = 104;
 const VDP_DECODER_PROFILE_HEVC_MAIN_444_10: vdpau::VdpDecoderProfile = 105;
 const VDP_DECODER_PROFILE_HEVC_MAIN_444_12: vdpau::VdpDecoderProfile = 106;
 
-fn is_va_profile_supported(ctx: va::VADriverContextP, profile: va::VAProfile) -> bool {
+pub(crate) fn get_vdpau_profile(
+    profile: va::VAProfile,
+) -> Result<vdpau::VdpDecoderProfile, va::VAStatus> {
+    match profile {
+        va::VAProfile_VAProfileMPEG2Simple => Ok(VDP_DECODER_PROFILE_MPEG2_SIMPLE),
+        va::VAProfile_VAProfileMPEG2Main => Ok(VDP_DECODER_PROFILE_MPEG2_MAIN),
+
+        va::VAProfile_VAProfileMPEG4Simple => Ok(VDP_DECODER_PROFILE_MPEG4_PART2_SP),
+        va::VAProfile_VAProfileMPEG4AdvancedSimple => Ok(VDP_DECODER_PROFILE_MPEG4_PART2_ASP),
+
+        va::VAProfile_VAProfileH264Baseline => Ok(VDP_DECODER_PROFILE_H264_BASELINE),
+        va::VAProfile_VAProfileH264Main => Ok(VDP_DECODER_PROFILE_H264_MAIN),
+        va::VAProfile_VAProfileH264High => Ok(VDP_DECODER_PROFILE_H264_HIGH),
+
+        va::VAProfile_VAProfileVC1Simple => Ok(VDP_DECODER_PROFILE_VC1_SIMPLE),
+        va::VAProfile_VAProfileVC1Main => Ok(VDP_DECODER_PROFILE_VC1_MAIN),
+        va::VAProfile_VAProfileVC1Advanced => Ok(VDP_DECODER_PROFILE_VC1_ADVANCED),
+
+        va::VAProfile_VAProfileVP9Profile0 => Ok(VDP_DECODER_PROFILE_VP9_PROFILE_0),
+        _ => Err(va::VA_STATUS_ERROR_UNSUPPORTED_PROFILE as _),
+    }
+}
+
+fn is_va_profile_supported(
+    ctx: va::VADriverContextP,
+    profile: va::VAProfile,
+) -> Result<(), va::VAStatus> {
     let driver = unsafe { &*((*ctx).pDriverData as *mut driver::Driver) };
 
-    let vdpau_profile = match profile {
-        va::VAProfile_VAProfileMPEG2Simple => VDP_DECODER_PROFILE_MPEG2_SIMPLE,
-        va::VAProfile_VAProfileMPEG2Main => VDP_DECODER_PROFILE_MPEG2_MAIN,
-
-        va::VAProfile_VAProfileMPEG4Simple => VDP_DECODER_PROFILE_MPEG4_PART2_SP,
-        va::VAProfile_VAProfileMPEG4AdvancedSimple => VDP_DECODER_PROFILE_MPEG4_PART2_ASP,
-
-        va::VAProfile_VAProfileH264Baseline => VDP_DECODER_PROFILE_H264_BASELINE,
-        va::VAProfile_VAProfileH264Main => VDP_DECODER_PROFILE_H264_MAIN,
-        va::VAProfile_VAProfileH264High => VDP_DECODER_PROFILE_H264_HIGH,
-
-        va::VAProfile_VAProfileVC1Simple => VDP_DECODER_PROFILE_VC1_SIMPLE,
-        va::VAProfile_VAProfileVC1Main => VDP_DECODER_PROFILE_VC1_MAIN,
-        va::VAProfile_VAProfileVC1Advanced => VDP_DECODER_PROFILE_VC1_ADVANCED,
-
-        va::VAProfile_VAProfileVP9Profile0 => VDP_DECODER_PROFILE_VP9_PROFILE_0,
-        _ => {
-            return false;
-        }
-    };
+    let vdpau_profile = get_vdpau_profile(profile)?;
 
     let mut is_supported = vdpau::VDP_FALSE;
     let mut max_level = 0;
@@ -83,10 +90,10 @@ fn is_va_profile_supported(ctx: va::VADriverContextP, profile: va::VAProfile) ->
     .eq(&vdpau::VdpStatus_VDP_STATUS_OK)
         || is_supported != vdpau::VDP_TRUE
     {
-        panic!("decoder_query_capabilities");
+        return Err(va::VA_STATUS_ERROR_UNSUPPORTED_PROFILE as _);
     }
 
-    true
+    Ok(())
 }
 
 pub(crate) extern "C" fn vaQueryConfigProfiles(
@@ -110,7 +117,7 @@ pub(crate) extern "C" fn vaQueryConfigProfiles(
     ];
     let mut profile_index = 0;
     va_profiles.iter().enumerate().for_each(|(i, va_profile)| {
-        if is_va_profile_supported(ctx, *va_profile) {
+        if is_va_profile_supported(ctx, *va_profile).is_ok() {
             unsafe { profile_list.add(profile_index).write(*va_profile) };
             profile_index += 1;
         }
@@ -124,7 +131,32 @@ pub(crate) extern "C" fn vaQueryConfigEntrypoints(
     entrypoint_list: *mut va::VAEntrypoint,
     num_entrypoints: *mut ::std::os::raw::c_int,
 ) -> va::VAStatus {
-    todo!();
+    match get_vdpau_profile(profile) {
+        Ok(profile) => match profile as va::VAProfile {
+            va::VAProfile_VAProfileMPEG2Simple
+            | va::VAProfile_VAProfileMPEG2Main
+            | va::VAProfile_VAProfileMPEG4Simple
+            | va::VAProfile_VAProfileMPEG4AdvancedSimple
+            | va::VAProfile_VAProfileMPEG4Main
+            | va::VAProfile_VAProfileH264Baseline
+            | va::VAProfile_VAProfileH264Main
+            | va::VAProfile_VAProfileH264High
+            | va::VAProfile_VAProfileVC1Simple
+            | va::VAProfile_VAProfileVC1Main
+            | va::VAProfile_VAProfileVC1Advanced
+            | va::VAProfile_VAProfileVP9Profile0 => unsafe {
+                entrypoint_list.write(va::VAEntrypoint_VAEntrypointVLD);
+                num_entrypoints.write(1);
+            },
+            _ => unsafe {
+                num_entrypoints.write(0);
+            },
+        },
+        Err(error) => {
+            return error;
+        }
+    };
+    va::VA_STATUS_SUCCESS as _
 }
 pub(crate) extern "C" fn vaGetConfigAttributes(
     ctx: va::VADriverContextP,
